@@ -1,0 +1,88 @@
+# In-cluster OBI agent -- this is the genuinely-upstream way to run it (prod
+# runs the eBPF agent as a privileged DaemonSet on every node). Built from your
+# local OBI working tree: `make build-obi-image` (compile + Dockerfile.fast) and
+# `kind load docker-image`, hence imagePullPolicy: Never.
+#
+# hostPID lets OBI see every process on the node; hostNetwork +
+# ClusterFirstWithHostNet match prod and are required if you enable network
+# observability (still resolves cluster DNS for OTLP export + the API server).
+# The capability set is exactly the prod alloy-beyla set. If eBPF programs fail
+# to load on your kernel, see the README troubleshooting note about
+# `privileged: true`.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: obi
+  namespace: obi
+  labels:
+    app: obi
+spec:
+  selector:
+    matchLabels:
+      app: obi
+  template:
+    metadata:
+      labels:
+        app: obi
+    spec:
+      serviceAccountName: obi
+      hostPID: true
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      tolerations:
+        # Run on every node, including a tainted control-plane.
+        - operator: Exists
+      containers:
+        - name: obi
+          image: obi:dev
+          imagePullPolicy: Never
+          env:
+            - name: OTEL_EBPF_CONFIG_PATH
+              value: /config/obi-config.yml
+          securityContext:
+            runAsUser: 0
+            readOnlyRootFilesystem: true
+            capabilities:
+              add:
+                - BPF
+                - SYS_PTRACE
+                - NET_RAW
+                - NET_ADMIN
+                - CHECKPOINT_RESTORE
+                - DAC_READ_SEARCH
+                - PERFMON
+                - SYS_ADMIN
+              drop:
+                - ALL
+          volumeMounts:
+            - name: config
+              mountPath: /config
+            - name: tmp
+              mountPath: /tmp
+            - name: cgroup
+              mountPath: /sys/fs/cgroup
+            - name: kernel-debug
+              mountPath: /sys/kernel/debug
+            - name: bpf
+              mountPath: /sys/fs/bpf
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              memory: "768Mi"
+      volumes:
+        - name: config
+          configMap:
+            name: obi-config
+        - name: tmp
+          emptyDir: {}
+        - name: cgroup
+          hostPath:
+            path: /sys/fs/cgroup
+        - name: kernel-debug
+          hostPath:
+            path: /sys/kernel/debug
+        - name: bpf
+          hostPath:
+            path: /sys/fs/bpf

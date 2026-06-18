@@ -1,0 +1,2 @@
+# Per-directory kind kubeconfig (written by `make create-cluster`)
+kubeconfig.yaml

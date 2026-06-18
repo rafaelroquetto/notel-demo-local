@@ -1,0 +1,29 @@
+# kind cluster for the local "notel" OpenTelemetry demo.
+#
+# Single node: kind leaves the control-plane node schedulable, so all demo
+# workloads run here.
+#
+# extraMounts expose the host's debugfs + bpffs into the kind node so the
+# in-cluster OBI DaemonSet's hostPath mounts resolve to a populated
+# tracefs/bpffs (the eBPF prerequisites). On Linux the kind node shares the
+# host kernel, so this is all eBPF needs.
+#
+# extraPortMappings publishes the in-cluster otel-lgtm Grafana (NodePort 30300)
+# to http://localhost:3000. The astronomy-shop frontend is reached on demand
+# via `make shop` (port-forward) rather than a fixed NodePort.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: notel-demo-local
+nodes:
+  - role: control-plane
+    extraMounts:
+      - hostPath: /sys/kernel/debug
+        containerPath: /sys/kernel/debug
+      - hostPath: /sys/fs/bpf
+        containerPath: /sys/fs/bpf
+    extraPortMappings:
+      # otel-lgtm Grafana (Service nodePort 30300) -> http://localhost:3000
+      - containerPort: 30300
+        hostPort: 3000
+        listenAddress: "127.0.0.1"
+        protocol: TCP

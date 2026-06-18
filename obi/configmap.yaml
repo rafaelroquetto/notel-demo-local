@@ -1,0 +1,61 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: obi-config
+  namespace: obi
+data:
+  obi-config.yml: |
+    # OBI standalone config -- mirrors the prod alloy-beyla beyla.ebpf settings:
+    # Kubernetes-based discovery across all namespaces, context propagation on,
+    # exporting OTLP to otel-lgtm. No k8s metadata cache (a single DaemonSet pod
+    # runs its own informers via the in-cluster ServiceAccount).
+    log_level: DEBUG
+
+    attributes:
+      kubernetes:
+        enable: true
+        cluster_name: notel-demo-local
+
+    # Kubernetes-scoped discovery: only processes that belong to a cluster pod
+    # are instrumented (namespace "." = all namespaces, matching prod). Host
+    # processes are never touched. Exclude the telemetry plumbing itself so OBI
+    # doesn't instrument its own exporter traffic or the collectors.
+    discovery:
+      services:
+        - k8s_namespace: "."
+      exclude_services:
+        - exe_path: ".*alloy.*|.*otelcol.*|.*beyla.*|.*obi.*"
+
+    ebpf:
+      # "all" = HTTP header + TCP-level context propagation. This is the knob
+      # that makes OBI inject/read traceparent and therefore collide with the
+      # demo's own OTel SDK trace context -- the behaviour under test.
+      context_propagation: "all"
+      # Flip to true for verbose eBPF probe logs when debugging the agent.
+      bpf_debug: false
+
+    otel_traces_export:
+      endpoint: http://otel-lgtm.observability.svc.cluster.local:4317
+
+    otel_metrics_export:
+      endpoint: http://otel-lgtm.observability.svc.cluster.local:4317
+      features:
+        - application
+        - application_service_graph
+        - application_span_otel
+        - application_host
+        - application_process
+
+    # --- prod-faithful network observability (deferred for first bring-up) ----
+    # Uncomment to match prod exactly. Adds TC/socket eBPF network metrics and
+    # filters out infra traffic. Requires hostNetwork on the DaemonSet (already
+    # set in daemonset.yaml). Also add "network" to otel_metrics_export.features.
+    #
+    # network:
+    #   enable: true
+    # filter:
+    #   network:
+    #     k8s_src_owner_name:
+    #       not_match: '{kube*,*jaeger*,*prometheus*,*grafana*,*opensearch*,*otel-collector*}'
+    #     k8s_dst_owner_name:
+    #       not_match: '{kube*,*jaeger*,*prometheus*,*grafana*,*opensearch*,*otel-collector*}'
