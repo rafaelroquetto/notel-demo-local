@@ -1,11 +1,7 @@
-# Local all-in-one observability backend: grafana/otel-lgtm bundles Grafana,
-# Tempo, Prometheus/Mimir, Loki and an embedded OpenTelemetry Collector.
-#
-# It receives OTLP from BOTH the demo collector (the apps' SDK pipeline) and the
-# OBI DaemonSet (the eBPF pipeline) over cluster DNS, so the two can be compared
-# side by side in one Grafana. Grafana is published to the host via NodePort
-# 30300 (mapped to localhost:3000 by kind-config.yaml). Storage is ephemeral --
-# everything is lost when the pod restarts, which is fine for local debugging.
+# All-in-one local backend (Grafana + Tempo + Prometheus + Loki + embedded
+# collector). Receives OTLP from both the demo collector (SDK pipeline) and the
+# OBI DaemonSet (eBPF pipeline), so the two can be compared in one Grafana.
+# Storage is ephemeral.
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -40,7 +36,6 @@ spec:
             - name: grafana
               containerPort: 3000
           env:
-            # No login friction for local use.
             - name: GF_AUTH_ANONYMOUS_ENABLED
               value: "true"
             - name: GF_AUTH_ANONYMOUS_ORG_ROLE
@@ -70,16 +65,13 @@ spec:
   selector:
     app: otel-lgtm
   ports:
-    # OTLP ports are consumed in-cluster (collector + OBI) via the ClusterIP;
-    # their nodePorts are auto-assigned and unused from the host.
     - name: otlp-grpc
       port: 4317
       targetPort: 4317
     - name: otlp-http
       port: 4318
       targetPort: 4318
-    # Grafana is the only port published to the host (see kind-config.yaml).
     - name: grafana
       port: 3000
       targetPort: 3000
-      nodePort: 30300
+      nodePort: 30300   # published to localhost:3000 by kind-config.yaml

@@ -5,10 +5,6 @@ metadata:
   namespace: obi
 data:
   obi-config.yml: |
-    # OBI standalone config -- mirrors the prod alloy-beyla beyla.ebpf settings:
-    # Kubernetes-based discovery across all namespaces, context propagation on,
-    # exporting OTLP to otel-lgtm. No k8s metadata cache (a single DaemonSet pod
-    # runs its own informers via the in-cluster ServiceAccount).
     log_level: DEBUG
 
     attributes:
@@ -16,10 +12,8 @@ data:
         enable: true
         cluster_name: notel-demo-local
 
-    # Kubernetes-scoped discovery: only processes that belong to a cluster pod
-    # are instrumented (namespace "." = all namespaces, matching prod). Host
-    # processes are never touched. Exclude the telemetry plumbing itself so OBI
-    # doesn't instrument its own exporter traffic or the collectors.
+    # k8s_namespace "." matches all namespaces; only pod-backed processes are
+    # instrumented. Exclude the telemetry plumbing so OBI doesn't trace itself.
     discovery:
       services:
         - k8s_namespace: "."
@@ -27,16 +21,12 @@ data:
         - exe_path: ".*alloy.*|.*otelcol.*|.*beyla.*|.*obi.*"
 
     ebpf:
-      # "all" = HTTP header + TCP-level context propagation. This is the knob
-      # that makes OBI inject/read traceparent and therefore collide with the
-      # demo's own OTel SDK trace context -- the behaviour under test.
+      # "all" makes OBI inject/read traceparent -> the SDK collision under test.
       context_propagation: "all"
-      # Flip to true for verbose eBPF probe logs when debugging the agent.
       bpf_debug: false
 
     otel_traces_export:
       endpoint: http://otel-lgtm.observability.svc.cluster.local:4317
-
     otel_metrics_export:
       endpoint: http://otel-lgtm.observability.svc.cluster.local:4317
       features:
@@ -46,11 +36,8 @@ data:
         - application_host
         - application_process
 
-    # --- prod-faithful network observability (deferred for first bring-up) ----
-    # Uncomment to match prod exactly. Adds TC/socket eBPF network metrics and
-    # filters out infra traffic. Requires hostNetwork on the DaemonSet (already
-    # set in daemonset.yaml). Also add "network" to otel_metrics_export.features.
-    #
+    # Prod-faithful network observability (deferred for first bring-up): uncomment
+    # and add "network" to features above. Needs hostNetwork (already set).
     # network:
     #   enable: true
     # filter:

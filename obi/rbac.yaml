@@ -1,8 +1,5 @@
-# OBI runs in-cluster as a DaemonSet and discovers/decorates workloads through
-# the Kubernetes API using this ServiceAccount (in-cluster config -- no
-# KUBECONFIG). A single agent watches the API directly, so no separate
-# beyla-k8s-cache is needed; add one only if you later fan OBI out across many
-# nodes the way prod's alloy-beyla does.
+# RBAC for OBI's in-cluster Kubernetes discovery/metadata (in-cluster config, no
+# KUBECONFIG). A single agent watches the API directly, so no beyla-k8s-cache.
 apiVersion: v1
 kind: Namespace
 metadata:

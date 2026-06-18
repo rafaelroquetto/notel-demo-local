@@ -1,18 +1,7 @@
-# Overrides for the upstream opentelemetry/opentelemetry-demo chart, producing a
-# faithful-but-minimal "notel" demo:
-#
-#   * All 23 application microservices stay enabled, with their OTel SDK
-#     instrumentation ON (no OTEL_SDK_DISABLED) -- so Beyla/OBI's eBPF spans
-#     collide with the apps' own SDK spans. That collision is the thing
-#     we're here to observe.
-#   * The bundled UI/storage backends (Jaeger, Prometheus, Grafana, OpenSearch)
-#     are disabled -- the external otel-lgtm stack replaces them.
-#   * The demo's own otel-collector is KEPT (faithful topology -- every app
-#     already exports to it) but its exporters are repointed from the now-deleted
-#     backends to otel-lgtm. Both the SDK pipeline (apps -> collector -> lgtm)
-#     and the eBPF pipeline (OBI -> lgtm) land in the same Tempo/Prometheus/Loki.
+# Overrides for the upstream opentelemetry-demo chart: keep every app service
+# with its OTel SDK instrumentation ON (so OBI's eBPF spans collide with the SDK
+# spans), strip the bundled backends, and repoint the demo collector at otel-lgtm.
 
-# --- strip the bundled observability backends -------------------------------
 jaeger:
   enabled: false
 prometheus:
@@ -22,14 +11,16 @@ grafana:
 opensearch:
   enabled: false
 
-# --- keep the demo collector, repoint its exporters to otel-lgtm ------------
-# This deep-merges over the chart's default collector config. We only:
-#   1. add the otlp/lgtm exporter, and
-#   2. replace each pipeline's exporter list.
-# The original otlp/jaeger, otlphttp/prometheus and opensearch exporters remain
-# *defined* but unreferenced, so the collector never builds them (no startup
-# errors, no failed connections). The spanmetrics connector stays in the traces
-# exporters so the metrics pipeline's spanmetrics receiver keeps being fed.
+# flagd-ui is an optional flag-editor sidecar that OOMKills at its 250Mi limit
+# and crash-loops the pod; not needed for the demo or OBI.
+components:
+  flagd:
+    sidecarContainers: []
+
+# Add the otlp/lgtm exporter and swap each pipeline onto it. The original
+# jaeger/prometheus/opensearch exporters stay defined-but-unreferenced (never
+# built, so no errors); spanmetrics stays in traces so the metrics pipeline's
+# spanmetrics receiver keeps being fed.
 opentelemetry-collector:
   config:
     exporters:

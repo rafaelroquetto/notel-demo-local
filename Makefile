@@ -1,12 +1,8 @@
-# Local "notel" OpenTelemetry demo on kind, instrumented by an in-cluster OBI
-# DaemonSet built from your local OBI working tree, shipping to otel-lgtm.
-#
-# Quick start:
-#   make up            # cluster + lgtm + demo + obi (builds & loads your OBI)
-#   make grafana       # open http://localhost:3000
-#   make logs-obi      # tail the agent
-#   make redeploy-obi  # after editing OBI source: recompile + load + restart
-#   make down          # delete the cluster
+# make up           -> cluster + lgtm + demo + obi (builds & loads local OBI)
+# make grafana      -> http://localhost:3000
+# make logs-obi     -> tail the agent
+# make redeploy-obi -> after editing OBI source: recompile + load + restart
+# make down         -> delete the cluster
 
 CLUSTER            ?= notel-demo-local
 KIND_NODE_IMAGE    ?= kindest/node:v1.32.0     # mirrors prod EKS 1.32
@@ -16,8 +12,7 @@ DEMO_CHART_VERSION ?= 0.40.9
 OBI_REPO  ?= $(HOME)/dev/opentelemetry-ebpf-instrumentation
 OBI_IMAGE ?= obi:dev
 
-# Keep this cluster's kubeconfig local to the directory (does not touch your
-# default ~/.kube/config). Every kubectl/helm below inherits it.
+# Project-local kubeconfig: keeps this throwaway cluster out of ~/.kube/config.
 KUBECONFIG_FILE ?= $(CURDIR)/kubeconfig.yaml
 export KUBECONFIG = $(KUBECONFIG_FILE)
 
@@ -25,15 +20,10 @@ export KUBECONFIG = $(KUBECONFIG_FILE)
         build-obi-image load-obi-image deploy-obi redeploy-obi \
         logs-obi grafana shop status
 
-## ---- meta ----------------------------------------------------------------
 up: create-cluster deploy-lgtm deploy-demo deploy-obi
 	@echo
-	@echo "Stack is up."
-	@echo "  Grafana:     make grafana   (http://localhost:3000)"
-	@echo "  Agent logs:  make logs-obi"
-	@echo "  Shop UI:     make shop       (http://localhost:8080)"
+	@echo "Stack is up.  Grafana: make grafana  |  Agent logs: make logs-obi"
 
-# (Re)deploy the workloads onto an already-running cluster.
 deploy-all: deploy-lgtm deploy-demo deploy-obi
 
 down: delete-cluster
@@ -63,10 +53,7 @@ deploy-demo:
 		--timeout 600s
 
 ## ---- OBI agent -----------------------------------------------------------
-# Build your local OBI tree into a dev image. `make compile` produces bin/obi
-# (linux/amd64, static); Dockerfile.fast wraps it in a scratch image. If compile
-# fails on missing generated eBPF files, run `make generate` (or `make build`)
-# in $(OBI_REPO) once.
+# If compile fails on missing generated eBPF files, run `make generate` in $(OBI_REPO) once.
 build-obi-image:
 	$(MAKE) -C $(OBI_REPO) compile
 	docker build -f $(OBI_REPO)/Dockerfile.fast -t $(OBI_IMAGE) $(OBI_REPO)
@@ -80,7 +67,6 @@ deploy-obi: build-obi-image load-obi-image
 	kubectl apply -f obi/daemonset.yaml
 	kubectl -n obi rollout status ds/obi --timeout=180s
 
-# The inner-loop target: rebuild your OBI changes and roll the DaemonSet.
 redeploy-obi: build-obi-image load-obi-image
 	kubectl apply -f obi/configmap.yaml
 	kubectl -n obi rollout restart ds/obi
@@ -94,7 +80,6 @@ grafana:
 	@echo "Grafana: http://localhost:3000 (anonymous admin)"
 	@command -v xdg-open >/dev/null 2>&1 && xdg-open http://localhost:3000 >/dev/null 2>&1 || true
 
-# Astronomy shop UI on demand (blocks; Ctrl-C to stop).
 shop:
 	@echo "Astronomy shop: http://localhost:8080  (Ctrl-C to stop)"
 	kubectl -n $(DEMO_NS) port-forward svc/frontend-proxy 8080:8080

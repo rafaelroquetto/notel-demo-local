@@ -1,14 +1,7 @@
-# In-cluster OBI agent -- this is the genuinely-upstream way to run it (prod
-# runs the eBPF agent as a privileged DaemonSet on every node). Built from your
-# local OBI working tree: `make build-obi-image` (compile + Dockerfile.fast) and
-# `kind load docker-image`, hence imagePullPolicy: Never.
-#
-# hostPID lets OBI see every process on the node; hostNetwork +
-# ClusterFirstWithHostNet match prod and are required if you enable network
-# observability (still resolves cluster DNS for OTLP export + the API server).
-# The capability set is exactly the prod alloy-beyla set. If eBPF programs fail
-# to load on your kernel, see the README troubleshooting note about
-# `privileged: true`.
+# In-cluster OBI agent (prod runs the eBPF agent as a privileged DaemonSet).
+# hostPID lets OBI see all node processes; hostNetwork + ClusterFirstWithHostNet
+# match prod and are required for network observability. Caps are the prod
+# alloy-beyla set; if eBPF programs fail to load, swap them for `privileged: true`.
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
@@ -30,11 +23,10 @@ spec:
       hostNetwork: true
       dnsPolicy: ClusterFirstWithHostNet
       tolerations:
-        # Run on every node, including a tainted control-plane.
-        - operator: Exists
+        - operator: Exists   # run on the tainted control-plane node too
       containers:
         - name: obi
-          image: obi:dev
+          image: obi:dev     # built locally + kind-loaded
           imagePullPolicy: Never
           env:
             - name: OTEL_EBPF_CONFIG_PATH
