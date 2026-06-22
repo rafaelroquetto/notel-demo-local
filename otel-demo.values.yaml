@@ -13,9 +13,20 @@ opensearch:
 
 # flagd-ui is an optional flag-editor sidecar that OOMKills at its 250Mi limit
 # and crash-loops the pod; not needed for the demo or OBI.
+#
+# ad + fraud-detection are JVM services (+ the OTel Java agent); the upstream
+# 300Mi limit OOMKills them during the all-at-once startup on a single node.
 components:
   flagd:
     sidecarContainers: []
+  ad:
+    resources:
+      limits:
+        memory: 600Mi
+  fraud-detection:
+    resources:
+      limits:
+        memory: 600Mi
 
 # Add the otlp/lgtm exporter and swap each pipeline onto it. The original
 # jaeger/prometheus/opensearch exporters stay defined-but-unreferenced (never

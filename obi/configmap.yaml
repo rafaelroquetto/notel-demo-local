@@ -12,18 +12,21 @@ data:
         enable: true
         cluster_name: notel-demo-local
 
-    # k8s_namespace "." matches all namespaces; only pod-backed processes are
-    # instrumented. Exclude the telemetry plumbing so OBI doesn't trace itself.
+    # DEBUG SCOPE: narrowed to the recommendations path (frontend -> recommendation
+    # -> product-catalog) so a single curl's bpf_debug output is readable instead
+    # of drowning in the otel-lgtm stack. Revert to `- k8s_namespace: "."` (and
+    # bpf_debug: false below) for normal operation.
     discovery:
       services:
-        - k8s_namespace: "."
+        - k8s_namespace: opentelemetry-demo
+          k8s_deployment_name: "^(frontend|recommendation|product-catalog)$"
       exclude_services:
         - exe_path: ".*alloy.*|.*otelcol.*|.*beyla.*|.*obi.*"
 
     ebpf:
       # "all" makes OBI inject/read traceparent -> the SDK collision under test.
       context_propagation: "all"
-      bpf_debug: false
+      bpf_debug: true
 
     otel_traces_export:
       endpoint: http://otel-lgtm.observability.svc.cluster.local:4317

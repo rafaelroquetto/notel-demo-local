@@ -16,9 +16,14 @@ OBI_IMAGE ?= obi:dev
 KUBECONFIG_FILE ?= $(CURDIR)/kubeconfig.yaml
 export KUBECONFIG = $(KUBECONFIG_FILE)
 
+# Shared demo install command; validation targets append values overlays to it.
+DEMO_HELM = helm upgrade --install opentelemetry-demo opentelemetry/opentelemetry-demo \
+	--version $(DEMO_CHART_VERSION) --namespace $(DEMO_NS) --create-namespace --timeout 600s \
+	-f otel-demo.values.yaml
+
 .PHONY: up deploy-all down create-cluster delete-cluster deploy-lgtm deploy-demo \
         build-obi-image load-obi-image deploy-obi redeploy-obi \
-        logs-obi grafana shop status
+        logs-obi grafana shop status obi-only sdk-on test
 
 up: create-cluster deploy-lgtm deploy-demo deploy-obi
 	@echo
@@ -46,11 +51,7 @@ deploy-lgtm:
 deploy-demo:
 	helm repo add opentelemetry https://open-telemetry.github.io/opentelemetry-helm-charts >/dev/null
 	helm repo update opentelemetry >/dev/null
-	helm upgrade --install opentelemetry-demo opentelemetry/opentelemetry-demo \
-		--version $(DEMO_CHART_VERSION) \
-		--namespace $(DEMO_NS) --create-namespace \
-		-f otel-demo.values.yaml \
-		--timeout 600s
+	$(DEMO_HELM)
 
 ## ---- OBI agent -----------------------------------------------------------
 # If compile fails on missing generated eBPF files, run `make generate` in $(OBI_REPO) once.
@@ -71,6 +72,25 @@ redeploy-obi: build-obi-image load-obi-image
 	kubectl apply -f obi/configmap.yaml
 	kubectl -n obi rollout restart ds/obi
 	kubectl -n obi rollout status ds/obi --timeout=180s
+
+## ---- OBI trace test ------------------------------------------------------
+# OBI traces are only trustworthy as "OBI's" with the app SDK off (else the SDK
+# emits spans too). `obi-only` flips SDK off and ensures OBI is running;
+# `sdk-on` puts the SDK back (the normal both-tracing demo).
+obi-only:
+	$(DEMO_HELM) -f sdk-off.values.yaml
+	kubectl apply -f obi/rbac.yaml -f obi/configmap.yaml -f obi/daemonset.yaml
+	kubectl -n $(DEMO_NS) wait --for=condition=Available deploy --all --timeout=300s
+	kubectl -n obi rollout status ds/obi --timeout=180s
+
+sdk-on:
+	$(DEMO_HELM)
+	kubectl -n $(DEMO_NS) wait --for=condition=Available deploy --all --timeout=300s
+
+# Fire one checkout with a chosen trace ID, fetch that exact trace from Tempo,
+# assert checkout's call graph. PASS/FAIL. Run after `make obi-only`.
+test:
+	./test-obi-trace.py
 
 ## ---- helpers -------------------------------------------------------------
 logs-obi:

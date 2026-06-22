@@ -42,6 +42,8 @@ otel-lgtm.yaml        # otel-lgtm Deployment + NodePort Service (ns: observabili
 obi/rbac.yaml         # ServiceAccount + ClusterRole for k8s discovery (ns: obi)
 obi/configmap.yaml    # OBI native config (the beyla.ebpf equivalent)
 obi/daemonset.yaml    # privileged OBI DaemonSet, image obi:dev
+sdk-off.values.yaml   # OTEL_SDK_DISABLED overlay (makes OBI the sole tracer)
+test-obi-trace.py     # deterministic OBI trace test (make test)
 Makefile              # see `make` targets below
 ```
 
@@ -85,6 +87,29 @@ make logs-obi
    In Tempo, the same operation (e.g. `frontend → cart`) should show up from
    **both** producers — the SDK span and OBI's eBPF span. Compare trace IDs and
    span structure: that's the interference you're investigating.
+
+## Test OBI's traces
+
+Deterministic and non-interactive: fire one checkout with a trace ID we choose
+(injected via `traceparent`, which OBI adopts), fetch that exact trace from
+Tempo by ID, and assert OBI rebuilt checkout's call graph.
+
+```sh
+make obi-only   # SDK off, OBI on -> OBI is the sole tracer (helm rolls the demo; ~1-2 min)
+make test       # PASS/FAIL
+```
+
+`make test` self-manages its port-forwards (frontend + Tempo). It checks the
+trace's spans are actually OBI's (warns if the SDK is still on), prints each
+expected edge `OK`/`MISS` plus any async Kafka edges as a bonus, and exits
+non-zero on failure. Edit the `EXPECT` set in `test-obi-trace.py` to change what
+"correct" means.
+
+OBI is *expected* to miss the SDK's internal in-process spans (no network →
+invisible to eBPF); the interesting open question is the cross-language **Kafka**
+edges (`checkout → accounting`/`fraud-detection`).
+
+Revert to the normal demo (SDK + OBI both tracing) with `make sdk-on`.
 
 ## Debugging OBI
 
